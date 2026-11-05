@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect Four</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f1b33; --panel:#16264a; --board:#1f4fd1; --board-dark:#163aa0;
+    --hole:#0b1428; --red:#ef3b3b; --red-d:#b51f1f; --yel:#ffcc1f; --yel-d:#d19c00;
+    --text:#eef2ff; --muted:#93a3c9; --accent:#6ee7b7;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%, #23407e 0%, var(--bg) 60%);
+    color:var(--text); font-family:'Fredoka',system-ui,sans-serif;
+    display:flex; flex-direction:column; align-items:center; padding:20px 12px 32px;
+    min-height:100vh; -webkit-tap-highlight-color:transparent;
+  }
+  h1{margin:4px 0 2px; font-size:clamp(28px,6vw,44px); letter-spacing:1px; font-weight:700}
+  h1 .r{color:var(--red)} h1 .y{color:var(--yel)}
+  .controls{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin:12px 0 10px}
+  .seg{display:flex; background:var(--panel); border-radius:999px; padding:4px}
+  .seg button{background:none; border:0; color:var(--muted); font:inherit; font-weight:600;
+    padding:7px 14px; border-radius:999px; cursor:pointer; font-size:14px}
+  .seg button.on{background:#2c4485; color:var(--text)}
+  .btn{background:var(--panel); border:0; color:var(--text); font:inherit; font-weight:600;
+    padding:9px 16px; border-radius:999px; cursor:pointer; font-size:14px}
+  .btn:hover{background:#21376a}
+  .btn:disabled{opacity:.4; cursor:default}
+  .status{height:38px; display:flex; align-items:center; gap:10px; font-size:20px; font-weight:600; margin:4px 0 8px}
+  .chip{width:22px; height:22px; border-radius:50%; display:inline-block}
+  .chip.R{background:radial-gradient(circle at 35% 35%, #ff7a7a, var(--red) 55%, var(--red-d))}
+  .chip.Y{background:radial-gradient(circle at 35% 35%, #fff09a, var(--yel) 55%, var(--yel-d))}
+  .score{display:flex; gap:18px; color:var(--muted); font-size:15px; margin-bottom:10px}
+  .score b{color:var(--text)}
+
+  .wrap{--size:min(92vw, 560px); width:var(--size); position:relative}
+  .preview{display:grid; grid-template-columns:repeat(7,1fr); height:calc(var(--size)/7); }
+  .preview div{display:flex; align-items:center; justify-content:center}
+  .preview .p{width:78%; aspect-ratio:1; border-radius:50%; opacity:0; transition:opacity .12s}
+  .board{
+    position:relative; width:100%; aspect-ratio:7/6; background:linear-gradient(180deg,var(--board),var(--board-dark));
+    border-radius:18px; padding:2.2%; box-shadow:0 18px 40px rgba(0,0,0,.45), inset 0 2px 0 rgba(255,255,255,.15);
+    display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr); gap:0;
+    touch-action:manipulation; user-select:none;
+  }
+  .cell{position:relative; display:flex; align-items:center; justify-content:center; cursor:pointer}
+  .cell::before{content:""; position:absolute; width:80%; aspect-ratio:1; border-radius:50%;
+    background:var(--hole); box-shadow:inset 0 4px 8px rgba(0,0,0,.6)}
+  .disc{position:relative; width:80%; aspect-ratio:1; border-radius:50%; z-index:1;
+    box-shadow:inset 0 -4px 6px rgba(0,0,0,.25), 0 2px 3px rgba(0,0,0,.3)}
+  .disc.R{background:radial-gradient(circle at 35% 35%, #ff8a8a, var(--red) 55%, var(--red-d))}
+  .disc.Y{background:radial-gradient(circle at 35% 35%, #fff3a8, var(--yel) 55%, var(--yel-d))}
+  .disc.drop{animation:drop var(--dur,.4s) cubic-bezier(.45,0,.75,1) both}
+  @keyframes drop{
+    0%{transform:translateY(calc(var(--from) * -100%))}
+    80%{transform:translateY(0)}
+    90%{transform:translateY(-6%)}
+    100%{transform:translateY(0)}
+  }
+  .disc.win{animation:pulse .9s ease-in-out infinite alternate; box-shadow:0 0 0 4px var(--accent), 0 0 18px var(--accent)}
+  @keyframes pulse{to{transform:scale(.88)}}
+  .col-hl{position:absolute; top:0; bottom:0; background:rgba(255,255,255,.07); border-radius:12px; pointer-events:none; transition:left .08s; display:none}
+  .hint{color:var(--muted); font-size:13px; margin-top:14px; text-align:center}
+  .thinking{display:inline-block; animation:blink 1s infinite}
+  @keyframes blink{50%{opacity:.3}}
+</style>
+</head>
+<body>
+  <h1><span class="r">Connect</span> <span class="y">Four</span></h1>
+
+  <div class="controls">
+    <div class="seg" id="modeSeg">
+      <button data-mode="ai" class="on">vs Computer</button>
+      <button data-mode="pvp">2 Players</button>
+    </div>
+    <div class="seg" id="diffSeg">
+      <button data-d="2">Easy</button>
+      <button data-d="5" class="on">Medium</button>
+      <button data-d="8">Hard</button>
+    </div>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div class="score" id="score"></div>
+
+  <div class="wrap">
+    <div class="preview" id="preview"></div>
+    <div class="board" id="board"><div class="col-hl" id="colhl"></div></div>
+  </div>
+
+  <div class="controls" style="margin-top:16px">
+    <button class="btn" id="undo">↶ Undo</button>
+    <button class="btn" id="newgame">New game</button>
+    <button class="btn" id="swap">Computer goes first</button>
+  </div>
+  <div class="hint">Click a column (or press 1–7) to drop a disc. Get four in a row — across, down, or diagonally.</div>
+
+<script>
+const ROWS=6, COLS=7;
+let grid, turn, over, history, winLine, busy=false;
+let mode='ai', depth=5, aiFirst=false;
+const score={R:0,Y:0,D:0};
+const humanColor=()=> aiFirst?'Y':'R';
+const aiColor=()=> aiFirst?'R':'Y';
+
+const boardEl=document.getElementById('board'), previewEl=document.getElementById('preview');
+const statusEl=document.getElementById('status'), scoreEl=document.getElementById('score');
+const colhl=document.getElementById('colhl');
+const cells=[]; const previews=[];
+
+for(let c=0;c<COLS;c++){
+  const d=document.createElement('div'); const p=document.createElement('div'); p.className='p chip';
+  d.appendChild(p); previewEl.appendChild(d); previews.push(p);
+}
+for(let r=0;r<ROWS;r++){ cells.push([]);
+  for(let c=0;c<COLS;c++){
+    const el=document.createElement('div'); el.className='cell'; el.dataset.c=c;
+    boardEl.appendChild(el); cells[r].push(el);
+  }
+}
+
+function newGame(){
+  grid=Array.from({length:ROWS},()=>Array(COLS).fill(null));
+  turn='R'; over=false; history=[]; winLine=null; busy=false;
+  for(const row of cells) for(const el of row) el.innerHTML='';
+  render();
+  maybeAI();
+}
+
+function lowestRow(g,c){ for(let r=ROWS-1;r>=0;r--) if(!g[r][c]) return r; return -1; }
+
+function findWin(g){
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const v=g[r][c]; if(!v) continue;
+    for(const [dr,dc] of dirs){
+      const line=[[r,c]];
+      for(let k=1;k<4;k++){ const rr=r+dr*k, cc=c+dc*k;
+        if(rr<0||rr>=ROWS||cc<0||cc>=COLS||g[rr][cc]!==v) break; line.push([rr,cc]); }
+      if(line.length===4) return {who:v,line};
+    }
+  }
+  return null;
+}
+const isFull=g=>g[0].every(x=>x);
+
+function play(c, animate=true){
+  if(over||busy) return false;
+  const r=lowestRow(grid,c); if(r<0) return false;
+  grid[r][c]=turn; history.push(c);
+  const disc=document.createElement('div'); disc.className='disc '+turn+(animate?' drop':'');
+  disc.style.setProperty('--from', r+1.2);
+  disc.style.setProperty('--dur', (0.25+0.06*r)+'s');
+  cells[r][c].appendChild(disc);
+  const w=findWin(grid);
+  if(w){ over=true; winLine=w.line; score[w.who]++;
+    setTimeout(()=>w.line.forEach(([rr,cc])=>cells[rr][cc].firstChild&&cells[rr][cc].firstChild.classList.add('win')), 420);
+  } else if(isFull(grid)){ over=true; score.D++; }
+  else turn = turn==='R'?'Y':'R';
+  render();
+  return true;
+}
+
+function undo(){
+  if(busy||!history.length) return;
+  if(over){ const w=findWin(grid); if(w) score[w.who]--; else score.D--; }
+  if(mode==='ai'){
+    // pop until it's human's turn and at least one human move removed
+    let removedHuman=false;
+    while(history.length){
+      const c=history.pop(); const r=lowestRow(grid,c)+1; const who=grid[r][c];
+      grid[r][c]=null; cells[r][c].innerHTML='';
+      if(who===humanColor()) removedHuman=true;
+      if(removedHuman && who===humanColor()) { turn=who; break; }
+    }
+    if(!history.length) turn='R';
+  } else {
+    const c=history.pop(); const r=lowestRow(grid,c)+1; turn=grid[r][c]; grid[r][c]=null; cells[r][c].innerHTML='';
+  }
+  over=false; winLine=null;
+  render();
+  maybeAI();
+}
+
+/* ---------- AI: alpha-beta minimax ---------- */
+const ORDER=[3,2,4,1,5,0,6];
+function scoreWindow(w, me){
+  const op = me==='R'?'Y':'R';
+  let m=0,o=0,e=0; for(const x of w){ if(x===me)m++; else if(x===op)o++; else e++; }
+  if(m===4) return 1000;
+  if(m===3&&e===1) return 6;
+  if(m===2&&e===2) return 2;
+  if(o===3&&e===1) return -8;
+  if(o===2&&e===2) return -1;
+  return 0;
+}
+function evaluate(g, me){
+  let s=0;
+  for(let r=0;r<ROWS;r++) if(g[r][3]===me) s+=4;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(c+3<COLS) s+=scoreWindow([g[r][c],g[r][c+1],g[r][c+2],g[r][c+3]],me);
+    if(r+3<ROWS) s+=scoreWindow([g[r][c],g[r+1][c],g[r+2][c],g[r+3][c]],me);
+    if(r+3<ROWS&&c+3<COLS) s+=scoreWindow([g[r][c],g[r+1][c+1],g[r+2][c+2],g[r+3][c+3]],me);
+    if(r+3<ROWS&&c-3>=0) s+=scoreWindow([g[r][c],g[r+1][c-1],g[r+2][c-2],g[r+3][c-3]],me);
+  }
+  return s;
+}
+function minimax(g, d, a, b, maximizing, me){
+  const w=findWin(g);
+  if(w) return w.who===me ? 100000+d : -100000-d;
+  if(isFull(g)) return 0;
+  if(d===0) return evaluate(g,me);
+  const op = me==='R'?'Y':'R';
+  if(maximizing){
+    let best=-Infinity;
+    for(const c of ORDER){ const r=lowestRow(g,c); if(r<0) continue;
+      g[r][c]=me; best=Math.max(best,minimax(g,d-1,a,b,false,me)); g[r][c]=null;
+      a=Math.max(a,best); if(a>=b) break; }
+    return best;
+  } else {
+    let best=Infinity;
+    for(const c of ORDER){ const r=lowestRow(g,c); if(r<0) continue;
+      g[r][c]=op; best=Math.min(best,minimax(g,d-1,a,b,true,me)); g[r][c]=null;
+      b=Math.min(b,best); if(a>=b) break; }
+    return best;
+  }
+}
+function bestMove(){
+  const g=grid.map(r=>r.slice()); const me=aiColor();
+  let bestScore=-Infinity, choices=[];
+  for(const c of ORDER){ const r=lowestRow(g,c); if(r<0) continue;
+    g[r][c]=me;
+    let s=minimax(g,depth-1,-Infinity,Infinity,false,me);
+    g[r][c]=null;
+    if(depth<=2) s+=Math.random()*12; // make Easy beatable
+    if(s>bestScore){bestScore=s; choices=[c];} else if(s===bestScore) choices.push(c);
+  }
+  return choices[Math.floor(Math.random()*choices.length)];
+}
+function maybeAI(){
+  if(mode!=='ai'||over||turn!==aiColor()) return;
+  busy=true; render();
+  setTimeout(()=>{ const c=bestMove(); busy=false; play(c); }, 450);
+}
+
+/* ---------- UI ---------- */
+function name(p){
+  if(mode==='ai') return p===humanColor()?'You':'Computer';
+  return p==='R'?'Red':'Yellow';
+}
+function render(){
+  const w = over ? findWin(grid) : null;
+  if(over && w){
+    const msg = mode==='ai' ? (w.who===humanColor()?'You win! 🎉':'Computer wins') : `${name(w.who)} wins! 🎉`;
+    statusEl.innerHTML=`<span class="chip ${w.who}"></span>${msg}`;
+  } else if(over){
+    statusEl.textContent="It's a draw!";
+  } else if(busy){
+    statusEl.innerHTML=`<span class="chip ${turn}"></span><span class="thinking">Computer is thinking…</span>`;
+  } else {
+    statusEl.innerHTML=`<span class="chip ${turn}"></span>${mode==='ai'?'Your turn':name(turn)+"'s turn"}`;
+  }
+  const a = mode==='ai' ? [`You <b>${score[humanColor()]}</b>`,`Computer <b>${score[aiColor()]}</b>`] : [`Red <b>${score.R}</b>`,`Yellow <b>${score.Y}</b>`];
+  scoreEl.innerHTML=`<span>${a[0]}</span><span>Draws <b>${score.D}</b></span><span>${a[1]}</span>`;
+  document.getElementById('undo').disabled = !history.length || busy;
+  document.getElementById('diffSeg').style.display = mode==='ai'?'flex':'none';
+  document.getElementById('swap').style.display = mode==='ai'?'':'none';
+  document.getElementById('swap').textContent = aiFirst?'You go first':'Computer goes first';
+  previews.forEach(p=>p.className='p chip '+turn);
+}
+
+let hoverCol=-1;
+function setHover(c){
+  hoverCol=c;
+  const canAct = !over && !busy && !(mode==='ai'&&turn===aiColor());
+  previews.forEach((p,i)=>p.style.opacity = (canAct && i===c && lowestRow(grid,i)>=0)?1:0);
+  if(canAct && c>=0){
+    const pad=boardEl.clientWidth*0.022, cw=(boardEl.clientWidth-2*pad)/COLS;
+    colhl.style.display='block'; colhl.style.left=(pad+cw*c)+'px'; colhl.style.width=cw+'px';
+  } else colhl.style.display='none';
+}
+function humanPlay(c){
+  if(mode==='ai'&&turn===aiColor()) return;
+  if(play(c)){ setHover(-1); maybeAI(); }
+}
+boardEl.addEventListener('mousemove',e=>{ const t=e.target.closest('.cell'); if(t) setHover(+t.dataset.c); });
+boardEl.addEventListener('mouseleave',()=>setHover(-1));
+boardEl.addEventListener('click',e=>{ const t=e.target.closest('.cell'); if(t) humanPlay(+t.dataset.c); });
+document.addEventListener('keydown',e=>{
+  const n=parseInt(e.key,10); if(n>=1&&n<=7) humanPlay(n-1);
+  if(e.key==='ArrowLeft'){ setHover(Math.max(0,(hoverCol<0?3:hoverCol)-1)); }
+  if(e.key==='ArrowRight'){ setHover(Math.min(6,(hoverCol<0?3:hoverCol)+1)); }
+  if((e.key==='Enter'||e.key===' '||e.key==='ArrowDown') && hoverCol>=0){ e.preventDefault(); humanPlay(hoverCol); }
+  if(e.key==='u'||e.key==='U') undo();
+});
+
+document.getElementById('modeSeg').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  [...e.currentTarget.children].forEach(x=>x.classList.toggle('on',x===b));
+  mode=b.dataset.mode; score.R=score.Y=score.D=0; newGame();
+});
+document.getElementById('diffSeg').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  [...e.currentTarget.children].forEach(x=>x.classList.toggle('on',x===b));
+  depth=+b.dataset.d; newGame();
+});
+document.getElementById('newgame').onclick=newGame;
+document.getElementById('undo').onclick=undo;
+document.getElementById('swap').onclick=()=>{ aiFirst=!aiFirst; score.R=score.Y=score.D=0; newGame(); };
+
+newGame();
+</script>
+</body>
+</html>
